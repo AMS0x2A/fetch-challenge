@@ -15,6 +15,16 @@ Future Enhancement:
 - Make dynamic the receipt schema's reference to item schema (avoiding circular references)
 """
 
+"""
++10 for 2nd rec
++20 for 3rd
+
+(x - 1)*10 : x is rec number from user
+
+user_id on request; storage open; assume valid user
+rec order matters without time constraints
+"""
+
 class DataInstance(object):
     """ 
     Data Instance (Singleton) for the api. 
@@ -25,6 +35,7 @@ class DataInstance(object):
 
     receipts = {}
     receipt_points = {}
+    receipts_by_user = {}
 
     try:
         _spec_dict, _ = read_from_filename(Path(PROJECT_DIR, "api.yml"))
@@ -56,19 +67,30 @@ class ReceiptProcessor(Resource):
         if not self.__valid_receipt(request.json):
             return "", 400
         
-        id = self.__process_receipt()
-        DataInstance.receipts[id] = request.json
+        id = self.__process_receipt(request.json)
+        # user_id live in request.json
         return jsonify(
             {
                 "id": id
             }
         )
     
-    def __process_receipt(self) -> uuid.UUID:
-        _receipt_number = "".join(  # randomly generated alphanumeric string of length 8
-            random.choices(string.ascii_uppercase + string.digits, k=8)
-        )
-        return uuid.uuid5(uuid.NAMESPACE_URL, f"Receipt #{_receipt_number}")
+    def __process_receipt(self, receipt: dict) -> uuid.UUID:
+        receipt_id = uuid.uuid4()
+        user_id = receipt["user_id"]
+
+        if not user_id in DataInstance().receipts_by_user.keys():
+            DataInstance().receipts_by_user[user_id] = [receipt_id]
+        else:
+            DataInstance().receipts_by_user[user_id].append(receipt_id)
+
+        DataInstance().receipts[receipt_id] = {
+            "receipt": receipt,
+            "user_id": user_id,
+            "index": len(DataInstance().receipts_by_user[user_id])
+        }
+        
+        return uuid.uuid4()
 
     def __valid_receipt(self, receipt) -> bool: 
         try:
